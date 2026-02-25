@@ -1,4 +1,4 @@
-import {App, Plugin, PluginSettingTab, setIcon, Setting, debounce} from "obsidian";
+import {App, Plugin, PluginSettingTab, setIcon, Setting, TFile, TFolder, debounce} from "obsidian";
 import {CompatQuickExplorer} from "./compat/compat-quickexplorer";
 
 export interface HideFoldersPluginSettings {
@@ -6,6 +6,7 @@ export interface HideFoldersPluginSettings {
   matchCaseInsensitive: boolean;
   addHiddenFoldersToObsidianIgnoreList: boolean;
   hideBottomStatusBarIndicatorText: boolean;
+  hideEmptyFolders: boolean;
   enableCompatQuickExplorer: boolean;
   attachmentFolderNames: string[];
 }
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS: HideFoldersPluginSettings = {
   matchCaseInsensitive: true,
   addHiddenFoldersToObsidianIgnoreList: false,
   hideBottomStatusBarIndicatorText: false,
+  hideEmptyFolders: false,
   enableCompatQuickExplorer: false,
   attachmentFolderNames: ["attachments"],
 };
@@ -24,15 +26,19 @@ export default class HideFoldersPlugin extends Plugin {
   ribbonIconButton: HTMLElement;
   statusBarItem?: HTMLElement;
   mutationObserver: MutationObserver;
+  recentlyEmptiedFolders: Map<string, number> = new Map();
+  skipGracePeriod = false;
 
   private processFolders = debounce(async (recheckPreviouslyHiddenFolders?: boolean) => {
-    if(this.settings.attachmentFolderNames.length === 0) return;
+    if(this.settings.attachmentFolderNames.length === 0 && !this.settings.hideEmptyFolders) return;
 
     if(recheckPreviouslyHiddenFolders) {
-      document.querySelectorAll<HTMLElement>(".obsidian-hide-folders--hidden").forEach((folder) => {
+      document.querySelectorAll<HTMLElement>(".obsidian-hide-folders--hidden, .obsidian-hide-folders--empty-hidden").forEach((folder) => {
         folder.style.height = "";
         folder.style.overflow = "";
+        folder.style.display = "";
         folder.removeClass("obsidian-hide-folders--hidden");
+        folder.removeClass("obsidian-hide-folders--empty-hidden");
       });
     }
 
@@ -55,6 +61,55 @@ export default class HideFoldersPlugin extends Plugin {
         folder.style.overflow = this.settings.areFoldersHidden ? "hidden" : "";
       });
     });
+
+    // Hide empty folders
+    if (this.settings.hideEmptyFolders) {
+      document.querySelectorAll<HTMLElement>(".nav-folder-title[data-path]").forEach((titleEl) => {
+        const folderEl = titleEl.parentElement;
+        if (!folderEl) return;
+
+        // Skip folders already handled by the explicit hide list
+        if (folderEl.hasClass("obsidian-hide-folders--hidden")) return;
+
+        const folderPath = titleEl.getAttribute("data-path");
+        if (!folderPath) return;
+
+        // Skip folders currently being renamed
+        if (folderEl.querySelector("input, .nav-folder-title-content[contenteditable]")) return;
+
+        if (this.isFolderEmpty(folderPath)) {
+          // Only apply grace period when actively hiding and not explicitly toggled
+          if (this.settings.areFoldersHidden && !this.skipGracePeriod) {
+            // Start a grace period before hiding, so the user has time to add files
+            if (!this.recentlyEmptiedFolders.has(folderPath)) {
+              this.recentlyEmptiedFolders.set(folderPath, Date.now());
+              window.setTimeout(() => {
+                this.processFolders();
+              }, 10000);
+              return;
+            }
+            // Still within grace period, skip hiding
+            if (Date.now() - this.recentlyEmptiedFolders.get(folderPath)! < 10000) return;
+            this.recentlyEmptiedFolders.delete(folderPath);
+          }
+
+          folderEl.addClass("obsidian-hide-folders--empty-hidden");
+          folderEl.style.height = this.settings.areFoldersHidden ? "0" : "";
+          folderEl.style.display = this.settings.areFoldersHidden ? "none" : "";
+          folderEl.style.overflow = this.settings.areFoldersHidden ? "hidden" : "";
+        } else {
+          // Folder is no longer empty, clear grace period and make sure it's visible
+          this.recentlyEmptiedFolders.delete(folderPath);
+          if (folderEl.hasClass("obsidian-hide-folders--empty-hidden")) {
+            folderEl.style.height = "";
+            folderEl.style.display = "";
+            folderEl.style.overflow = "";
+            folderEl.removeClass("obsidian-hide-folders--empty-hidden");
+          }
+        }
+      });
+    }
+    this.skipGracePeriod = false;
   }, 10, false);
 
   getQuerySelectorStringForFolderName(folderName: string) {
@@ -67,8 +122,22 @@ export default class HideFoldersPlugin extends Plugin {
     }
   }
 
+  isFolderEmpty(folderPath: string): boolean {
+    const abstractFile = this.app.vault.getAbstractFileByPath(folderPath);
+    if (!(abstractFile instanceof TFolder)) return false;
+
+    for (const child of abstractFile.children) {
+      if (child instanceof TFile) return false;
+      if (child instanceof TFolder && !this.isFolderEmpty(child.path)) return false;
+    }
+
+    return true;
+  }
+
   async toggleFunctionality() {
     this.settings.areFoldersHidden = !this.settings.areFoldersHidden;
+    this.recentlyEmptiedFolders.clear();
+    this.skipGracePeriod = true;
     this.ribbonIconButton.ariaLabel = this.settings.areFoldersHidden ? "Show hidden folders" : "Hide hidden folders again";
     setIcon(this.ribbonIconButton, this.settings.areFoldersHidden ? "eye" : "eye-off");
     if(this.statusBarItem) {
@@ -176,9 +245,20 @@ export default class HideFoldersPlugin extends Plugin {
     });
     this.mutationObserver.observe(window.document, {childList: true, subtree: true});
 
-    // used for re-processing folders when a folder is newly created or renamed
+    // used for re-processing folders when a folder is newly created, renamed, or files are added/removed
     this.registerEvent(this.app.vault.on("rename", () => {
-      // small delay is needed, otherwise the new folder won't get picked-up yet when calling processFolders
+      window.setTimeout(() => {
+        this.processFolders();
+      }, 10);
+    }));
+
+    this.registerEvent(this.app.vault.on("create", () => {
+      window.setTimeout(() => {
+        this.processFolders();
+      }, 10);
+    }));
+
+    this.registerEvent(this.app.vault.on("delete", () => {
       window.setTimeout(() => {
         this.processFolders();
       }, 10);
@@ -260,6 +340,16 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
           this.plugin.settings.areFoldersHidden = value;
           await this.plugin.saveSettings();
           await this.plugin.updateObsidianIgnoreList();
+      }));
+
+    new Setting(containerEl)
+      .setName("Hide empty folders")
+      .setDesc("Automatically hide folders that contain no files. They will reappear when files are added. Folders in the explicit hide list above are always hidden regardless.")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.hideEmptyFolders)
+        .onChange(async (value) => {
+          this.plugin.settings.hideEmptyFolders = value;
+          await this.plugin.saveSettings();
       }));
 
    new Setting(containerEl)
