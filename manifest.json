@@ -1,9 +1,9 @@
 {
 	"id": "hide-folders",
-	"name": "Hide Folders",
+	"name": "Hide Folders (Fork)",
 	"version": "1.5.2",
 	"minAppVersion": "0.15.0",
-	"description": "Hides & Toggles configured folders (e.g. attachments folders).",
+	"description": "Fork of JonasDoesThings/obsidian-hide-folders. Hides & toggles configured folders, with added support for hiding empty folders.",
 	"author": "titandrive (fork of JonasDoesThings)",
 	"authorUrl": "https://github.com/titandrive/obsidian-hide-folders",
 	"isDesktopOnly": false

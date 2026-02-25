@@ -392,10 +392,17 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
     containerEl.appendChild(document.createElement("br"));
 
     new Setting(containerEl)
-      .setName("GitHub")
-      .setDesc("Report Issues or Ideas, see the Source Code and Contribute.")
+      .setName("GitHub (Fork)")
+      .setDesc("This is a fork of JonasDoesThings/obsidian-hide-folders. Report issues for this fork here:")
       .addButton(button =>  button
-        .buttonEl.innerHTML = '<a href="https://github.com/titandrive/obsidian-hide-folders" target="_blank">obsidian-hide-folders</a>'
+        .buttonEl.innerHTML = '<a href="https://github.com/titandrive/obsidian-hide-folders" target="_blank">titandrive/obsidian-hide-folders</a>'
+      );
+
+    new Setting(containerEl)
+      .setName("Original Plugin")
+      .setDesc("The original plugin by JonasDoesThings:")
+      .addButton(button =>  button
+        .buttonEl.innerHTML = '<a href="https://github.com/JonasDoesThings/obsidian-hide-folders" target="_blank">JonasDoesThings/obsidian-hide-folders</a>'
       );
 
     containerEl.appendChild(document.createElement("br"));
