@@ -22,10 +22,10 @@ const DEFAULT_SETTINGS: HideFoldersPluginSettings = {
 };
 
 export default class HideFoldersPlugin extends Plugin {
-  settings: HideFoldersPluginSettings;
-  ribbonIconButton: HTMLElement;
+  settings!: HideFoldersPluginSettings;
+  ribbonIconButton!: HTMLElement;
   statusBarItem?: HTMLElement;
-  mutationObserver: MutationObserver;
+  mutationObserver!: MutationObserver;
   recentlyEmptiedFolders: Map<string, number> = new Map();
   skipGracePeriod = false;
 
@@ -33,10 +33,8 @@ export default class HideFoldersPlugin extends Plugin {
     if(this.settings.attachmentFolderNames.length === 0 && !this.settings.hideEmptyFolders) return;
 
     if(recheckPreviouslyHiddenFolders) {
-      document.querySelectorAll<HTMLElement>(".obsidian-hide-folders--hidden, .obsidian-hide-folders--empty-hidden").forEach((folder) => {
-        folder.style.height = "";
-        folder.style.overflow = "";
-        folder.style.display = "";
+      activeDocument.querySelectorAll<HTMLElement>(".obsidian-hide-folders--hidden, .obsidian-hide-folders--empty-hidden").forEach((folder) => {
+        folder.setCssProps({ height: "", overflow: "", display: "" });
         folder.removeClass("obsidian-hide-folders--hidden");
         folder.removeClass("obsidian-hide-folders--empty-hidden");
       });
@@ -45,7 +43,7 @@ export default class HideFoldersPlugin extends Plugin {
     this.settings.attachmentFolderNames.forEach(folderName => {
       if(getFolderNameWithoutPrefix(folderName) === "") return;
 
-      const folderElements = document.querySelectorAll<HTMLElement>([
+      const folderElements = activeDocument.querySelectorAll<HTMLElement>([
         this.getQuerySelectorStringForFolderName(folderName),
         this.settings.enableCompatQuickExplorer ? CompatQuickExplorer.getAdditionalDocumentSelectorStringForFolder?.(folderName, this.settings) : null,
       ].filter((o) => o != null).join(", "));
@@ -56,15 +54,17 @@ export default class HideFoldersPlugin extends Plugin {
         }
 
         folder.addClass("obsidian-hide-folders--hidden");
-        folder.style.height = this.settings.areFoldersHidden ? "0" : "";
-        folder.style.display = this.settings.areFoldersHidden ? "none" : "";
-        folder.style.overflow = this.settings.areFoldersHidden ? "hidden" : "";
+        folder.setCssProps({
+          height: this.settings.areFoldersHidden ? "0" : "",
+          display: this.settings.areFoldersHidden ? "none" : "",
+          overflow: this.settings.areFoldersHidden ? "hidden" : "",
+        });
       });
     });
 
     // Hide empty folders
     if (this.settings.hideEmptyFolders) {
-      document.querySelectorAll<HTMLElement>(".nav-folder-title[data-path]").forEach((titleEl) => {
+      activeDocument.querySelectorAll<HTMLElement>(".nav-files-container .nav-folder-title[data-path]").forEach((titleEl) => {
         const folderEl = titleEl.parentElement;
         if (!folderEl) return;
 
@@ -94,31 +94,30 @@ export default class HideFoldersPlugin extends Plugin {
           }
 
           folderEl.addClass("obsidian-hide-folders--empty-hidden");
-          folderEl.style.height = this.settings.areFoldersHidden ? "0" : "";
-          folderEl.style.display = this.settings.areFoldersHidden ? "none" : "";
-          folderEl.style.overflow = this.settings.areFoldersHidden ? "hidden" : "";
+          folderEl.setCssProps({
+            height: this.settings.areFoldersHidden ? "0" : "",
+            display: this.settings.areFoldersHidden ? "none" : "",
+            overflow: this.settings.areFoldersHidden ? "hidden" : "",
+          });
         } else {
           // Folder is no longer empty, clear grace period and make sure it's visible
           this.recentlyEmptiedFolders.delete(folderPath);
           if (folderEl.hasClass("obsidian-hide-folders--empty-hidden")) {
-            folderEl.style.height = "";
-            folderEl.style.display = "";
-            folderEl.style.overflow = "";
+            folderEl.setCssProps({ height: "", display: "", overflow: "" });
             folderEl.removeClass("obsidian-hide-folders--empty-hidden");
           }
         }
       });
     }
-    this.skipGracePeriod = false;
   }, 10, false);
 
   getQuerySelectorStringForFolderName(folderName: string) {
     if(folderName.toLowerCase().startsWith("endswith::")) {
-      return `*:has(> [data-path$="${getFolderNameWithoutPrefix(folderName)}"${this.settings.matchCaseInsensitive ? " i" : ""}])`;
+      return `.nav-files-container *:has(> [data-path$="${getFolderNameWithoutPrefix(folderName)}"${this.settings.matchCaseInsensitive ? " i" : ""}])`;
     } else if(folderName.toLowerCase().startsWith("startswith::")) {
-      return `*:has(> .nav-folder-title[data-path^="${getFolderNameWithoutPrefix(folderName)}"${this.settings.matchCaseInsensitive ? " i" : ""}]), *:has(> .nav-folder-title[data-path*="/${getFolderNameWithoutPrefix(folderName)}"${this.settings.matchCaseInsensitive ? " i" : ""}])`;
+      return `.nav-files-container *:has(> .nav-folder-title[data-path^="${getFolderNameWithoutPrefix(folderName)}"${this.settings.matchCaseInsensitive ? " i" : ""}]), .nav-files-container *:has(> .nav-folder-title[data-path*="/${getFolderNameWithoutPrefix(folderName)}"${this.settings.matchCaseInsensitive ? " i" : ""}])`;
     } else {
-      return `*:has(> [data-path$="/${folderName.trim()}"${this.settings.matchCaseInsensitive ? " i" : ""}]), *:has(> [data-path="${folderName.trim()}"${this.settings.matchCaseInsensitive ? " i" : ""}])`;
+      return `.nav-files-container *:has(> [data-path$="/${folderName.trim()}"${this.settings.matchCaseInsensitive ? " i" : ""}]), .nav-files-container *:has(> [data-path="${folderName.trim()}"${this.settings.matchCaseInsensitive ? " i" : ""}])`;
     }
   }
 
@@ -137,13 +136,16 @@ export default class HideFoldersPlugin extends Plugin {
   async toggleFunctionality() {
     this.settings.areFoldersHidden = !this.settings.areFoldersHidden;
     this.recentlyEmptiedFolders.clear();
+    // Toggling hides empty folders at once, without the grace period. The folders get processed
+    // more than once after a toggle (debounced runs), so this stays on a moment rather than one run.
     this.skipGracePeriod = true;
+    window.setTimeout(() => { this.skipGracePeriod = false; }, 500);
     this.ribbonIconButton.ariaLabel = this.settings.areFoldersHidden ? "Show hidden folders" : "Hide hidden folders again";
     setIcon(this.ribbonIconButton, this.settings.areFoldersHidden ? "eye" : "eye-off");
     if(this.statusBarItem) {
-      this.statusBarItem.innerHTML = this.settings.areFoldersHidden ? "Configured folders are hidden" : "";
+      this.statusBarItem.setText(this.settings.areFoldersHidden ? "Configured folders are hidden" : "");
     }
-    await this.processFolders();
+    this.processFolders();
     await this.saveSettings();
     await this.updateObsidianIgnoreList();
   }
@@ -181,6 +183,10 @@ export default class HideFoldersPlugin extends Plugin {
 
   async updateObsidianIgnoreList(processFeatureDisabling?: boolean) {
     if(!this.settings.addHiddenFoldersToObsidianIgnoreList && !processFeatureDisabling) return;
+    if(!("getConfig" in this.app.vault && "setConfig" in this.app.vault)) {
+      console.error("[obsidian-hide-folders] failed to update obsidian ignore list. the API surface probably changed in an update. please report to https://github.com/JonasDoesThings/obsidian-hide-folders/issues");
+      return;
+    }
 
     // @ts-ignore
     let ignoreList = (this.app.vault.getConfig("userIgnoreFilters") ?? []) as string[];
@@ -201,11 +207,15 @@ export default class HideFoldersPlugin extends Plugin {
   }
 
   async removeSpecificFoldersFromObsidianIgnoreList(folderNames: string[]) {
+    if(!("config" in this.app.vault)) {
+      console.error("[obsidian-hide-folders] failed to remove from obsidian ignore list. the API surface probably changed in an update. please report to https://github.com/JonasDoesThings/obsidian-hide-folders/issues");
+      return;
+    }
+
     folderNames.forEach(folderName => {
-      // @ts-ignore
-      this.app.vault.config.userIgnoreFilters?.remove(this.createIgnoreListRegExpForFolderName(folderName));
-      this.app.vault.trigger("config-changed");
+      (this.app.vault as {config?: {userIgnoreFilters?: string[]}}).config?.userIgnoreFilters?.remove(this.createIgnoreListRegExpForFolderName(folderName));
     });
+    this.app.vault.trigger("config-changed");
   }
 
   createBottomStatusBarIndicatorTextItem() {
@@ -217,13 +227,11 @@ export default class HideFoldersPlugin extends Plugin {
   }
 
   async onload() {
-    console.log("loading plugin hide-folders");
-
     await this.loadSettings();
 
     // This creates an icon in the left ribbon.
-    this.ribbonIconButton = this.addRibbonIcon(this.settings.areFoldersHidden ? "eye" : "eye-off", this.settings.areFoldersHidden ? "Show hidden folders" : "Hide hidden folders again", (evt: MouseEvent) => {
-      this.toggleFunctionality();
+    this.ribbonIconButton = this.addRibbonIcon(this.settings.areFoldersHidden ? "eye" : "eye-off", this.settings.areFoldersHidden ? "Show hidden folders" : "Hide hidden folders again", () => {
+      void this.toggleFunctionality();
     });
 
     if(!this.settings.hideBottomStatusBarIndicatorText) {
@@ -235,7 +243,7 @@ export default class HideFoldersPlugin extends Plugin {
       id: "toggle-attachment-folders",
       name: "Toggle visibility of hidden folders",
       callback: () => {
-        this.toggleFunctionality();
+        void this.toggleFunctionality();
       },
     });
 
@@ -247,7 +255,7 @@ export default class HideFoldersPlugin extends Plugin {
         .setTitle(listed ? "Stop hiding folder" : "Hide folder")
         .setIcon(listed ? "eye" : "eye-off")
         .setSection("action")
-        .onClick(() => listed ? this.unhideFolder(file.path) : this.hideFolder(file.path)));
+        .onClick(() => void (listed ? this.unhideFolder(file.path) : this.hideFolder(file.path))));
     }));
 
     // This adds a settings tab so the user can configure various aspects of the plugin
@@ -305,12 +313,12 @@ export default class HideFoldersPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<HideFoldersPluginSettings>);
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
-    await this.processFolders(true);
+    this.processFolders(true);
   }
 }
 
@@ -326,15 +334,12 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
     const {containerEl} = this;
     containerEl.empty();
 
-    const experimentalSettingsContainerEl = document.createElement("details");
-    const experimentalSettingsTitleEl = document.createElement("summary");
-    experimentalSettingsTitleEl.innerText = "Experimental & Unstable Settings";
-    experimentalSettingsContainerEl.appendChild(experimentalSettingsTitleEl);
-
     new Setting(containerEl)
       .setName("Folders to hide")
+      // eslint-disable-next-line obsidianmd/ui/sentence-case
       .setDesc("The names of the folders to hide, one per line. Either exact folder-names, startsWith::FOLDERPREFIX, or endsWith::FOLDERSUFFIX")
       .addTextArea(text => text
+        // eslint-disable-next-line obsidianmd/ui/sentence-case
         .setPlaceholder("attachments\nendsWith::_attachments")
         .setValue(this.plugin.settings.attachmentFolderNames.join("\n"))
         .onChange(async (value) => {
@@ -347,7 +352,8 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
       }));
 
     new Setting(containerEl)
-      .setName("Ignore Upper/lowercase")
+      .setName("Ignore upper/lowercase")
+      // eslint-disable-next-line obsidianmd/ui/sentence-case
       .setDesc("If enabled, 'SOMEFOLDER', 'someFolder', or 'sOmeFoldEr' will all be treated the same and matched.")
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.matchCaseInsensitive)
@@ -381,8 +387,8 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
       }));
 
    new Setting(containerEl)
-      .setName("Add Hidden Folders to Obsidian Exclusion-List")
-      .setDesc("Excluded files will be hidden in Search, Graph View, and Unlinked Mentions, less noticeable in Quick Switcher and link suggestions.")
+      .setName("Add hidden folders to Obsidian exclusion-list")
+      .setDesc("Excluded files will be hidden in search, graph view, and unlinked mentions, less noticeable in quick switcher and link suggestions.")
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.addHiddenFoldersToObsidianIgnoreList)
         .onChange(async (value) => {
@@ -392,6 +398,7 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
       }));
 
    new Setting(containerEl)
+     // eslint-disable-next-line obsidianmd/ui/sentence-case
       .setName("Hide bottom status-bar \"Folders are Hidden\" indicator")
       .setDesc("If enable there will be no bottom-bar indicator-text telling you if this plugin is active.")
       .addToggle(toggle => toggle
@@ -407,9 +414,33 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
       }));
 
+    containerEl.createEl("br");
+
+    new Setting(containerEl)
+      .setName("GitHub (fork)")
+      .setDesc("This is a fork of JonasDoesThings/obsidian-hide-folders. Report issues for this fork here:")
+      .addButton(button => button
+        .buttonEl.innerHTML = '<a href="https://github.com/titandrive/obsidian-hide-folders" target="_blank">titandrive/obsidian-hide-folders</a>',
+      );
+
+    new Setting(containerEl)
+      .setName("Original plugin")
+      .setDesc("The original plugin by JonasDoesThings:")
+      .addButton(button => button
+        .buttonEl.innerHTML = '<a href="https://github.com/JonasDoesThings/obsidian-hide-folders" target="_blank">JonasDoesThings/obsidian-hide-folders</a>',
+      );
+
+    containerEl.createEl("br");
+
+    const experimentalSettingsContainerEl = containerEl.createEl("details");
+    const experimentalSettingsTitleEl = experimentalSettingsContainerEl.createEl("summary");
+    // eslint-disable-next-line obsidianmd/ui/sentence-case
+    experimentalSettingsTitleEl.innerText = "Experimental & Unstable Settings";
+
     new Setting(experimentalSettingsContainerEl)
-      .setName("[EXPERIMENTAL] Compatibility: quick-explorer by pjeby")
-      .setDesc("[WARNING: UNSTABLE] Also hide hidden folders in the https://github.com/pjeby/quick-explorer plugin. Not affiliated with quick-explorer's author.")
+      .setName("Compatibility: quick-explorer by pjeby")
+      // eslint-disable-next-line obsidianmd/ui/sentence-case
+      .setDesc("Also hide hidden folders in the https://github.com/pjeby/quick-explorer plugin. Not affiliated with quick-explorer's author.")
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.enableCompatQuickExplorer)
         .onChange(async (value) => {
@@ -417,24 +448,6 @@ class HideFoldersPluginSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.appendChild(document.createElement("br"));
-
-    new Setting(containerEl)
-      .setName("GitHub (Fork)")
-      .setDesc("This is a fork of JonasDoesThings/obsidian-hide-folders. Report issues for this fork here:")
-      .addButton(button =>  button
-        .buttonEl.innerHTML = '<a href="https://github.com/titandrive/obsidian-hide-folders" target="_blank">titandrive/obsidian-hide-folders</a>'
-      );
-
-    new Setting(containerEl)
-      .setName("Original Plugin")
-      .setDesc("The original plugin by JonasDoesThings:")
-      .addButton(button =>  button
-        .buttonEl.innerHTML = '<a href="https://github.com/JonasDoesThings/obsidian-hide-folders" target="_blank">JonasDoesThings/obsidian-hide-folders</a>'
-      );
-
-    containerEl.appendChild(document.createElement("br"));
-    containerEl.appendChild(experimentalSettingsContainerEl);
   }
 }
 

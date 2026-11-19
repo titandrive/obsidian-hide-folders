@@ -14,7 +14,9 @@ This is useful for folders like "Inbox" that are usually empty and just clutter 
 - **Recursive check** — a folder containing only empty subfolders is still considered empty.
 
 ## Installation
-This fork is not available in the Obsidian community plugin directory. To install, download `main.js` and `manifest.json` from the [latest release](https://github.com/titandrive/obsidian-hide-folders/releases) and copy them to your vault at `VaultFolder/.obsidian/plugins/hide-folders/`.
+This fork is not available in the Obsidian community plugin directory. To install, download `main.js` and `manifest.json` from the [latest release](https://github.com/titandrive/obsidian-hide-folders/releases) and copy them to your vault at `VaultFolder/.obsidian/plugins/hide-folders-fork/`.
+
+The fork has its own plugin id, `hide-folders-fork`, so Obsidian's plugin updater never replaces it with the original plugin. If you had an older copy of the fork installed under `.obsidian/plugins/hide-folders/`, move your `data.json` over to the new folder and remove the old one.
 
 ## Configuration
 Enter the list of folder names to hide in the settings menu, **one folder per line**.
@@ -38,11 +40,11 @@ Using the command palette is also supported:
 ## Development
 ### Setup
 - Clone this repo.
-- `npm i` or `yarn` to install dependencies
-- `npm run dev` to start compilation in watch mode.
+- `pnpm i` to install dependencies
+- `pnpm dev` to start compilation in watch mode.
 
 ### Building
-- `npm run build` to do a one-off build of the project, which produces the files needed for manually installing the plugin.
+- `pnpm build` to do a one-off build of the project, which produces the files needed for manually installing the plugin.
 
 ### Manually installing the plugin
 - Copy over the outputted `main.js`, `manifest.json` from the `dist/` folder to your vault `VaultFolder/.obsidian/plugins/obsidian-hide-folders/`.
