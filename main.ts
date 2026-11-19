@@ -1,4 +1,4 @@
-import {App, Plugin, PluginSettingTab, setIcon, Setting, TFile, TFolder, debounce} from "obsidian";
+import {App, Notice, Plugin, PluginSettingTab, setIcon, Setting, TFile, TFolder, debounce} from "obsidian";
 import {CompatQuickExplorer} from "./compat/compat-quickexplorer";
 
 export interface HideFoldersPluginSettings {
@@ -148,6 +148,23 @@ export default class HideFoldersPlugin extends Plugin {
     await this.updateObsidianIgnoreList();
   }
 
+  async hideFolder(path: string) {
+    const names = this.settings.attachmentFolderNames.filter(n => n.trim() !== "");
+    if (!names.includes(path)) names.push(path);
+    this.settings.attachmentFolderNames = names;
+    await this.saveSettings();
+    await this.updateObsidianIgnoreList();
+    new Notice(this.settings.areFoldersHidden ? `Hid ${path}` : `Added ${path} to the hidden folders`);
+  }
+
+  async unhideFolder(path: string) {
+    await this.removeSpecificFoldersFromObsidianIgnoreList([path]);
+    this.settings.attachmentFolderNames = this.settings.attachmentFolderNames.filter(n => n !== path);
+    await this.saveSettings();
+    await this.updateObsidianIgnoreList();
+    new Notice(`No longer hiding ${path}`);
+  }
+
   createIgnoreListRegExpForFolderName(rawFolderName: string) {
     const folderName = this.settings.matchCaseInsensitive
       ? getFolderNameWithoutPrefix(rawFolderName).split("").map(c => c.toLowerCase() != c.toUpperCase() ? `[${c.toLowerCase()}${c.toUpperCase()}]` : c).join("")
@@ -221,6 +238,17 @@ export default class HideFoldersPlugin extends Plugin {
         this.toggleFunctionality();
       },
     });
+
+    // Right-click a folder: add it to (or take it off) the list of folders to hide.
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+      if (!(file instanceof TFolder) || file.isRoot()) return;
+      const listed = this.settings.attachmentFolderNames.includes(file.path);
+      menu.addItem(item => item
+        .setTitle(listed ? "Stop hiding folder" : "Hide folder")
+        .setIcon(listed ? "eye" : "eye-off")
+        .setSection("action")
+        .onClick(() => listed ? this.unhideFolder(file.path) : this.hideFolder(file.path)));
+    }));
 
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new HideFoldersPluginSettingTab(this.app, this));

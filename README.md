@@ -25,6 +25,8 @@ You can match folders using three ways:
 
 ![Screenshot of the Plugin Settings Screen in Obsidian.md](./docs/assets/settings-screenshot.png)
 
+You can also right-click a folder in the file explorer and choose **Hide folder** to add it to the list. On a folder that's already in the list (with hiding toggled off), the same menu offers **Stop hiding folder**.
+
 You can then also use a sidebar button to quickly toggle the visibility without having to enter the settings menu:
 
 ![Screenshot of the Plugin's Sidebar Button in Obsidian.md](docs/assets/sidebar-screenshot.png)
