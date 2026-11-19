@@ -27,6 +27,7 @@ export default class HideFoldersPlugin extends Plugin {
   statusBarItem?: HTMLElement;
   mutationObserver!: MutationObserver;
   recentlyEmptiedFolders: Map<string, number> = new Map();
+  nonEmptyFolders: Set<string> = new Set();
   skipGracePeriod = false;
 
   private processFolders = debounce(async (recheckPreviouslyHiddenFolders?: boolean) => {
@@ -78,18 +79,18 @@ export default class HideFoldersPlugin extends Plugin {
         if (folderEl.querySelector("input, .nav-folder-title-content[contenteditable]")) return;
 
         if (this.isFolderEmpty(folderPath)) {
-          // Only apply grace period when actively hiding and not explicitly toggled
-          if (this.settings.areFoldersHidden && !this.skipGracePeriod) {
-            // Start a grace period before hiding, so the user has time to add files
-            if (!this.recentlyEmptiedFolders.has(folderPath)) {
-              this.recentlyEmptiedFolders.set(folderPath, Date.now());
-              window.setTimeout(() => {
-                this.processFolders();
-              }, 10000);
-              return;
-            }
-            // Still within grace period, skip hiding
-            if (Date.now() - this.recentlyEmptiedFolders.get(folderPath)! < 10000) return;
+          // A folder that just became empty (it had files when last seen) stays visible for a grace
+          // period, so the user has time to add files. One that was already empty (at startup, after
+          // a settings change, or after a toggle) hides at once.
+          if (this.nonEmptyFolders.delete(folderPath) && this.settings.areFoldersHidden && !this.skipGracePeriod) {
+            this.recentlyEmptiedFolders.set(folderPath, Date.now());
+            window.setTimeout(() => {
+              this.processFolders();
+            }, 10000);
+          }
+          const emptiedAt = this.recentlyEmptiedFolders.get(folderPath);
+          if (emptiedAt !== undefined) {
+            if (Date.now() - emptiedAt < 10000) return;
             this.recentlyEmptiedFolders.delete(folderPath);
           }
 
@@ -100,8 +101,9 @@ export default class HideFoldersPlugin extends Plugin {
             overflow: this.settings.areFoldersHidden ? "hidden" : "",
           });
         } else {
-          // Folder is no longer empty, clear grace period and make sure it's visible
+          // Folder has files: clear any grace period, remember it for when it empties, and show it
           this.recentlyEmptiedFolders.delete(folderPath);
+          this.nonEmptyFolders.add(folderPath);
           if (folderEl.hasClass("obsidian-hide-folders--empty-hidden")) {
             folderEl.setCssProps({ height: "", display: "", overflow: "" });
             folderEl.removeClass("obsidian-hide-folders--empty-hidden");
