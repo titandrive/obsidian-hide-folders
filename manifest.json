@@ -4,7 +4,7 @@
 	"version": "1.5.5",
 	"minAppVersion": "1.0.0",
 	"description": "Hides & toggles configured folders, with support for hiding empty folders.",
-	"author": "titandrive (fork of JonasDoesThings)",
+	"author": "TitanDrive (fork of JonasDoesThings)",
 	"authorUrl": "https://github.com/titandrive/obsidian-hide-folders",
 	"isDesktopOnly": false
 }
